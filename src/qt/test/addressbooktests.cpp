@@ -2,21 +2,22 @@
 #include <qt/test/util.h>
 #include <test/test_bitcoin.h>
 
+#include <interfaces/chain.h>
 #include <interfaces/node.h>
 #include <qt/addressbookpage.h>
 #include <qt/addresstablemodel.h>
 #include <qt/editaddressdialog.h>
-#include <qt/callback.h>
 #include <qt/optionsmodel.h>
 #include <qt/platformstyle.h>
 #include <qt/qvalidatedlineedit.h>
 #include <qt/walletmodel.h>
 
 #include <key.h>
-#include <pubkey.h>
 #include <key_io.h>
+#include <pubkey.h>
 #include <wallet/wallet.h>
 
+#include <QApplication>
 #include <QTimer>
 #include <QMessageBox>
 
@@ -56,15 +57,16 @@ void EditAddressAndSubmit(
 void TestAddAddressesToSendBook()
 {
     TestChain100Setup test;
-    CWallet wallet("mock", WalletDatabase::CreateMock());
+    auto chain = interfaces::MakeChain();
+    std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(*chain, WalletLocation(), WalletDatabase::CreateMock());
     bool firstRun;
-    wallet.LoadWallet(firstRun);
+    wallet->LoadWallet(firstRun);
 
     auto build_address = [&wallet]() {
         CKey key;
         key.MakeNewKey(true);
         CTxDestination dest(GetDestinationForKey(
-            key.GetPubKey(), wallet.m_default_address_type));
+            key.GetPubKey(), wallet->m_default_address_type));
 
         return std::make_pair(dest, QString::fromStdString(EncodeDestination(dest)));
     };
@@ -87,13 +89,13 @@ void TestAddAddressesToSendBook()
     std::tie(std::ignore, new_address) = build_address();
 
     {
-        LOCK(wallet.cs_wallet);
-        wallet.SetAddressBook(r_key_dest, r_label.toStdString(), "receive");
-        wallet.SetAddressBook(s_key_dest, s_label.toStdString(), "send");
+        LOCK(wallet->cs_wallet);
+        wallet->SetAddressBook(r_key_dest, r_label.toStdString(), "receive");
+        wallet->SetAddressBook(s_key_dest, s_label.toStdString(), "send");
     }
 
     auto check_addbook_size = [&wallet](int expected_size) {
-        QCOMPARE(static_cast<int>(wallet.mapAddressBook.size()), expected_size);
+        QCOMPARE(static_cast<int>(wallet->mapAddressBook.size()), expected_size);
     };
 
     // We should start with the two addresses we added earlier and nothing else.
@@ -103,9 +105,9 @@ void TestAddAddressesToSendBook()
     std::unique_ptr<const PlatformStyle> platformStyle(PlatformStyle::instantiate("other"));
     auto node = interfaces::MakeNode();
     OptionsModel optionsModel(*node);
-    AddWallet(&wallet);
+    AddWallet(wallet);
     WalletModel walletModel(std::move(node->getWallets()[0]), *node, platformStyle.get(), &optionsModel);
-    RemoveWallet(&wallet);
+    RemoveWallet(wallet);
     EditAddressDialog editAddressDialog(EditAddressDialog::NewSendingAddress);
     editAddressDialog.setModel(walletModel.getAddressTableModel());
 
@@ -139,5 +141,16 @@ void TestAddAddressesToSendBook()
 
 void AddressBookTests::addressBookTests()
 {
+#ifdef Q_OS_MAC
+    if (QApplication::platformName() == "minimal") {
+        // Disable for mac on "minimal" platform to avoid crashes inside the Qt
+        // framework when it tries to look up unimplemented cocoa functions,
+        // and fails to handle returned nulls
+        // (https://bugreports.qt.io/browse/QTBUG-49686).
+        QWARN("Skipping AddressBookTests on mac build with 'minimal' platform set due to Qt bugs. To run AppTests, invoke "
+              "with 'test_bitcoin-qt -platform cocoa' on mac, or else use a linux or windows build.");
+        return;
+    }
+#endif
     TestAddAddressesToSendBook();
 }

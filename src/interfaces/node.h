@@ -38,7 +38,7 @@ public:
     virtual ~Node() {}
 
     //! Set command line arguments.
-    virtual void parseParameters(int argc, const char* const argv[]) = 0;
+    virtual bool parseParameters(int argc, const char* const argv[], std::string& error) = 0;
 
     //! Set a command line argument if it doesn't already have a value
     virtual bool softSetArg(const std::string& arg, const std::string& value) = 0;
@@ -47,7 +47,7 @@ public:
     virtual bool softSetBoolArg(const std::string& arg, bool value) = 0;
 
     //! Load settings from configuration file.
-    virtual void readConfigFiles() = 0;
+    virtual bool readConfigFiles(std::string& error) = 0;
 
     //! Choose network parameters.
     virtual void selectParams(const std::string& network) = 0;
@@ -172,6 +172,12 @@ public:
 
     //! Get unspent outputs associated with a transaction.
     virtual bool getUnspentOutput(const COutPoint& output, Coin& coin) = 0;
+
+    //! Return default wallet directory.
+    virtual std::string getWalletDir() = 0;
+
+    //! Return available wallets in wallet directory.
+    virtual std::vector<std::string> listWalletDir() = 0;
 
     //! Return interfaces for accessing wallets (if any).
     virtual std::vector<std::unique_ptr<Wallet>> getWallets() = 0;
